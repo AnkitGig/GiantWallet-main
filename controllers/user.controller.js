@@ -263,6 +263,7 @@ export const loginHandle = async (req, res) => {
       fullName: user.fullName,
       email: user.email,
       token: token,
+      isPinCreated: !!user.pin
     };
 
     // res.cookie("token", token, {
