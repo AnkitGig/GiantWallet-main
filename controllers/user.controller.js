@@ -516,14 +516,117 @@ export const verifyPinHandle = async (req, res) => {
 };
 
 
-export const changePinHandle = async(req, res)=>{
+// Change Pin
+export const changePinHandle = async (req, res) => {
   try {
-    
+    const { oldPin, newPin, confirmNewPin } = req.body;
+    const schema = Joi.object({
+      oldPin: Joi.string().length(4).required(),
+      newPin: Joi.string().length(4).required(),
+      confirmNewPin: Joi.string().length(4).required().valid(Joi.ref("newPin")).messages({
+        "any.only": "Confirm new pin must match new pin",
+      }),
+    });
+    const { error } = schema.validate(req.body);
+    if (error)
+      return res.status(400).json({ status: false, message: error.details[0].message });
+
+    const user = await User.findOne({ email: req.user.email });
+    if (!user)
+      return res.status(404).json(new ApiResponse(404, {}, `User not found`));
+
+    if (!user.isActive)
+      return res.status(400).json(new ApiResponse(400, {}, `your account has been temporarily blocked.`));
+
+    if (!user.pin)
+      return res.status(400).json(new ApiResponse(400, {}, `Pin not created.`));
+
+    const isOldPinCorrect = await user.isPinCorrect(oldPin);
+    if (!isOldPinCorrect)
+      return res.status(400).json(new ApiResponse(400, {}, `Old pin is incorrect.`));
+
+    if (oldPin === newPin)
+      return res.status(400).json(new ApiResponse(400, {}, `New pin cannot be same as old pin.`));
+
+    user.pin = newPin;
+    await user.save();
+    return res.status(200).json(new ApiResponse(200, {}, `Pin changed successfully.`));
   } catch (error) {
     console.log(`Error while changing pin :`, error);
-    return res
-      .status(500)
-      .json(new ApiResponse(500, {}, `Internal Server Error`));
-    
+    return res.status(500).json(new ApiResponse(500, {}, `Internal Server Error`));
   }
-}
+};
+
+// Forgot Pin - Send OTP
+export const forgotPinHandle = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const schema = Joi.object({
+      email: Joi.string().email().required(),
+    });
+    const { error } = schema.validate(req.body);
+    if (error)
+      return res.status(400).json({ status: false, message: error.details[0].message });
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user)
+      return res.status(404).json(new ApiResponse(404, {}, `User not found`));
+
+    if (!user.isVerified)
+      return res.status(400).json(new ApiResponse(400, {}, `User not verified. Please verify first.`));
+
+    if (!user.isActive)
+      return res.status(400).json(new ApiResponse(400, {}, `your account has been temporarily blocked.`));
+
+  const otp = generateOtp();
+  const otpExpireAt = getExpirationTime();
+  user.otp = otp;
+  user.otpExpireAt = otpExpireAt;
+  await user.save();
+  // Use dedicated pin reset email
+  const { sendOtpForgotPinMail } = await import("../utils/email.js");
+  await sendOtpForgotPinMail(user.fullName, user.otp, user.email);
+  console.log(`Pin reset OTP ---------> ${otp} `);
+  return res.status(201).json(new ApiResponse(200, {}, `The OTP has been sent to your registered email. Please check your inbox.`));
+  } catch (error) {
+    console.log(`Error while forgot pin :`, error);
+    return res.status(500).json(new ApiResponse(500, {}, `Internal Server Error`));
+  }
+};
+
+// Reset Pin after OTP verification
+export const resetPinHandle = async (req, res) => {
+  try {
+    const { email, otp, newPin, confirmNewPin } = req.body;
+    const schema = Joi.object({
+      email: Joi.string().email().required(),
+      otp: Joi.string().length(4).required(),
+      newPin: Joi.string().length(4).required(),
+      confirmNewPin: Joi.string().length(4).required().valid(Joi.ref("newPin")).messages({
+        "any.only": "Confirm new pin must match new pin",
+      }),
+    });
+    const { error } = schema.validate(req.body);
+    if (error)
+      return res.status(400).json({ status: false, message: error.details[0].message });
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user)
+      return res.status(404).json(new ApiResponse(404, {}, `User not found`));
+
+    if (!user.otp || !user.otpExpireAt)
+      return res.status(400).json(new ApiResponse(400, {}, `OTP not found. Please request a new OTP.`));
+
+    if (user.otp !== otp || new Date() > user.otpExpireAt)
+      return res.status(400).json(new ApiResponse(400, {}, `Invalid or expired OTP.`));
+
+    user.pin = newPin;
+    user.otp = null;
+    user.otpExpireAt = null;
+    await user.save();
+    return res.status(200).json(new ApiResponse(200, {}, `Pin reset successfully.`));
+  } catch (error) {
+    console.log(`Error while resetting pin :`, error);
+    return res.status(500).json(new ApiResponse(500, {}, `Internal Server Error`));
+  }
+};
