@@ -19,9 +19,6 @@ var transporter = nodemailer.createTransport({
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
     },
-       tls: {
-        rejectUnauthorized: false
-    }
 });
 
 
@@ -62,7 +59,6 @@ export const sendOtpMail = async function (name, otp, to) {
 };
 
 
-
 export const sendOtpforgotPasswordMail = async function (name, otp, to) {
     let mailOptions = {
         from: process.env.SMTP_USER, // sender address
@@ -75,33 +71,12 @@ export const sendOtpforgotPasswordMail = async function (name, otp, to) {
         },
     };
 
+    // Send email using transporter
     transporter.sendMail(mailOptions, function (err, info) {
-        if (err) {
-            console.log("Error -" + err);
-        } else {
-            console.log("Email sent successfully", info.response);
-        }
-    });
-};
-
-// Send OTP for Pin Reset
-export const sendOtpForgotPinMail = async function (name, otp, to) {
-    let mailOptions = {
-        from: process.env.SMTP_USER,
-        to: to,
-        subject: "Pin Reset OTP",
-        template: "pin",
-        context: {
-            name,
-            otp
-        },
-    };
-
-    transporter.sendMail(mailOptions, function (err, info) {
-        if (err) {
-            console.log("Error -" + err);
-        } else {
-            console.log("Email sent successfully", info.response);
+        if (err) { // If error occurs while sending email
+            console.log("Error -" + err); // Log the error
+        } else { // If email sent successfully
+            console.log("Email sent successfully", info.response); // Log the success message with email response info
         }
     });
 };

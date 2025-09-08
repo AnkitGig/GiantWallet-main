@@ -1,9 +1,11 @@
 import { ApiResponse } from "../utils/ApiReponse.js";
 import jwt from "jsonwebtoken";
 import Joi from "joi";
+import { sendSms } from "../utils/twillo.js";
 import { generateOtp, getExpirationTime } from "../utils/helpers.js";
 import { User } from "../models/user/user.js";
 import { sendOtpMail, sendOtpforgotPasswordMail } from "../utils/email.js";
+import { deleteOldImages } from "../utils/helpers.js";
 
 export const registerHandle = async (req, res) => {
   try {
@@ -60,8 +62,17 @@ export const registerHandle = async (req, res) => {
       otpExpireAt,
     });
 
-    await user.save();
+    let msg = `Your verification code is ${otp}. It will expire in 5 minutes. Do not share this code with anyone`;
+    const smsResult = await sendSms(phone, msg);
+    if (!smsResult.success)
+      return res
+        .status(403)
+        .json(
+          new ApiResponse(400, {}, `Something went wrong while sending sms`)
+        );
+
     await sendOtpMail(fullName, otp, email);
+    await user.save();
 
     console.log(` OTP ---------> ${otp} `);
 
@@ -253,7 +264,7 @@ export const loginHandle = async (req, res) => {
         .status(400)
         .json(new ApiResponse(400, {}, `Invalid credentials`));
     const token = jwt.sign(
-      { userId: user._id, role: user.role, email: user.email },
+      { id: user._id, role: user.role, email: user.email },
       process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
@@ -262,8 +273,9 @@ export const loginHandle = async (req, res) => {
       userId: user._id,
       fullName: user.fullName,
       email: user.email,
+      role: user.role,
+      isPinCreated: user.pin ? true : false,
       token: token,
-      isPinCreated: !!user.pin
     };
 
     // res.cookie("token", token, {
@@ -515,118 +527,182 @@ export const verifyPinHandle = async (req, res) => {
   }
 };
 
-
-// Change Pin
 export const changePinHandle = async (req, res) => {
   try {
-    const { oldPin, newPin, confirmNewPin } = req.body;
-    const schema = Joi.object({
-      oldPin: Joi.string().length(4).required(),
-      newPin: Joi.string().length(4).required(),
-      confirmNewPin: Joi.string().length(4).required().valid(Joi.ref("newPin")).messages({
-        "any.only": "Confirm new pin must match new pin",
-      }),
-    });
-    const { error } = schema.validate(req.body);
-    if (error)
-      return res.status(400).json({ status: false, message: error.details[0].message });
-
-    const user = await User.findOne({ email: req.user.email });
-    if (!user)
-      return res.status(404).json(new ApiResponse(404, {}, `User not found`));
-
-    if (!user.isActive)
-      return res.status(400).json(new ApiResponse(400, {}, `your account has been temporarily blocked.`));
-
-    if (!user.pin)
-      return res.status(400).json(new ApiResponse(400, {}, `Pin not created.`));
-
-    const isOldPinCorrect = await user.isPinCorrect(oldPin);
-    if (!isOldPinCorrect)
-      return res.status(400).json(new ApiResponse(400, {}, `Old pin is incorrect.`));
-
-    if (oldPin === newPin)
-      return res.status(400).json(new ApiResponse(400, {}, `New pin cannot be same as old pin.`));
-
-    user.pin = newPin;
-    await user.save();
-    return res.status(200).json(new ApiResponse(200, {}, `Pin changed successfully.`));
   } catch (error) {
     console.log(`Error while changing pin :`, error);
-    return res.status(500).json(new ApiResponse(500, {}, `Internal Server Error`));
+    return res
+      .status(500)
+      .json(new ApiResponse(500, {}, `Internal Server Error`));
   }
 };
 
-// Forgot Pin - Send OTP
-export const forgotPinHandle = async (req, res) => {
+export const updateProfileHandle = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { fullName, latitude, longitude } = req.body;
     const schema = Joi.object({
-      email: Joi.string().email().required(),
+      fullName: Joi.string().min(3).max(30).optional(),
+      latitude: Joi.string().optional(),
+      longitude: Joi.string().optional(),
     });
+
+    // console.log("req.file -------->", req.file)
     const { error } = schema.validate(req.body);
     if (error)
-      return res.status(400).json({ status: false, message: error.details[0].message });
+      return res
+        .status(400)
+        .json({ status: false, message: error.details[0].message });
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ _id: req.user.id });
+    // console.log("user ----->", user);
     if (!user)
       return res.status(404).json(new ApiResponse(404, {}, `User not found`));
 
-    if (!user.isVerified)
-      return res.status(400).json(new ApiResponse(400, {}, `User not verified. Please verify first.`));
+    if (req.file) deleteOldImages("profile", user.avatar);
+
+    fullName ? (user.fullName = fullName) : user.fullName;
+    req.file ? (user.avatar = req.file.filename) : user.avatar;
+    latitude
+      ? ((user.latitude = latitude), (user.longitude = longitude))
+      : user.latitude,
+      user.longitude;
+
+    await user.save();
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, {}, `Profile updated successfully.`));
+  } catch (error) {
+    console.log(`Error while updating profile :`, error);
+    return res
+      .status(501)
+      .json(new ApiResponse(500, {}, `Internal Server Error`));
+  }
+};
+
+export const myProfileHandle = async (req, res) => {
+  try {
+    const user = await User.findOne({ _id: req.user.id }).select(
+      "-password -otp -otpExpireAt -__v -createdAt -updatedAt -pin -otpVerifiedForResetPassword"
+    );
+
+    if (!user)
+      return res.status(404).json(new ApiResponse(404, {}, `User not found`));
 
     if (!user.isActive)
-      return res.status(400).json(new ApiResponse(400, {}, `your account has been temporarily blocked.`));
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(400, {}, `your account has been temporarily blocked.`)
+        );
 
-  const otp = generateOtp();
-  const otpExpireAt = getExpirationTime();
-  user.otp = otp;
-  user.otpExpireAt = otpExpireAt;
-  await user.save();
-  // Use dedicated pin reset email
-  const { sendOtpForgotPinMail } = await import("../utils/email.js");
-  await sendOtpForgotPinMail(user.fullName, user.otp, user.email);
-  console.log(`Pin reset OTP ---------> ${otp} `);
-  return res.status(201).json(new ApiResponse(200, {}, `The OTP has been sent to your registered email. Please check your inbox.`));
+    user.avatar = user.avatar
+      ? `${process.env.BASE_URL}/profile/${user.avatar}`
+      : `${process.env.DEFAULT_PROFILE_PIC}`;
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, user, `Profile fetched successfully.`));
   } catch (error) {
-    console.log(`Error while forgot pin :`, error);
-    return res.status(500).json(new ApiResponse(500, {}, `Internal Server Error`));
+    console.log(`Error while fetching profile :`, error);
+    return res
+      .status(501)
+      .json(new ApiResponse(500, {}, `Internal Server Error`));
   }
 };
 
-// Reset Pin after OTP verification
-export const resetPinHandle = async (req, res) => {
+export const deleteAvatarHandle = async (req, res) => {
   try {
-    const { email, otp, newPin, confirmNewPin } = req.body;
-    const schema = Joi.object({
-      email: Joi.string().email().required(),
-      otp: Joi.string().length(4).required(),
-      newPin: Joi.string().length(4).required(),
-      confirmNewPin: Joi.string().length(4).required().valid(Joi.ref("newPin")).messages({
-        "any.only": "Confirm new pin must match new pin",
-      }),
-    });
-    const { error } = schema.validate(req.body);
-    if (error)
-      return res.status(400).json({ status: false, message: error.details[0].message });
-
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ _id: req.user.id });
     if (!user)
       return res.status(404).json(new ApiResponse(404, {}, `User not found`));
 
-    if (!user.otp || !user.otpExpireAt)
-      return res.status(400).json(new ApiResponse(400, {}, `OTP not found. Please request a new OTP.`));
+    if (!user.isActive)
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(400, {}, `your account has been temporarily blocked.`)
+        );
 
-    if (user.otp !== otp || new Date() > user.otpExpireAt)
-      return res.status(400).json(new ApiResponse(400, {}, `Invalid or expired OTP.`));
+    if (!user.avatar)
+      return res
+        .status(400)
+        .json(new ApiResponse(400, {}, `Profile image not found.`));
 
-    user.pin = newPin;
-    user.otp = null;
-    user.otpExpireAt = null;
+    deleteOldImages("profile", user.avatar);
+    user.avatar = null;
     await user.save();
-    return res.status(200).json(new ApiResponse(200, {}, `Pin reset successfully.`));
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, {}, `Profile image deleted successfully.`));
   } catch (error) {
-    console.log(`Error while resetting pin :`, error);
-    return res.status(500).json(new ApiResponse(500, {}, `Internal Server Error`));
+    console.log(`Error while deleting profile image :`, error);
+    return res
+      .status(501)
+      .json(new ApiResponse(500, {}, `Internal Server Error`));
+  }
+};
+
+export const changePasswordHandle = async (req, res) => {
+  try {
+    const { oldPassword, newPassword, confirmPassword } = req.body;
+    const schema = Joi.object({
+      oldPassword: Joi.string().min(6).required(),
+      newPassword: Joi.string().min(6).required(),
+      confirmPassword: Joi.string()
+        .min(6)
+        .required()
+        .valid(Joi.ref("newPassword"))
+        .messages({
+          "any.only": "Confirm password must match password",
+        }),
+    });
+
+    const { error } = schema.validate(req.body);
+    if (error)
+      return res
+        .status(400)
+        .json({ status: false, message: error.details[0].message });
+    const user = await User.findOne({ _id: req.user.id });
+
+    if (!user)
+      return res.status(404).json(new ApiResponse(404, {}, `User not found`));
+
+    if (!user.isActive)
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(400, {}, `your account has been temporarily blocked.`)
+        );
+
+    const isCorrectPassword = await user.isPasswordCorrect(oldPassword);
+    if (!isCorrectPassword)
+      return res
+        .status(400)
+        .json(new ApiResponse(400, {}, `Old password is incorrect.`));
+
+    if (oldPassword === newPassword)
+      return res
+        .status(400)
+        .json(
+          new ApiResponse(
+            400,
+            {},
+            `You have entered your old password. Please enter a new password.`
+          )
+        );
+
+    user.password = newPassword;
+    await user.save();
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, {}, `Password changed successfully.`));
+  } catch (error) {
+    console.log(`Error while changing password :`, error);
+    return res
+      .status(501)
+      .json(new ApiResponse(500, {}, `Internal Server Error`));
   }
 };
