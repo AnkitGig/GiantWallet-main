@@ -95,45 +95,40 @@ export const updateFoundationHandle = async (req, res) => {
 
 export const getFoundationHandle = async (req, res) => {
   try {
-    const { id } = req.query;
-
-    const user = await User.findOne({ _id: req.user.id });
-    if (!user)
-      return res.status(401).json(new ApiResponse(400, {}, `User not found`));
-
+    const { id } = req.query; 
     if (id) {
       const data = await Foundation.findOne({ _id: id }).populate(
         "userId",
         "_id fullName email"
       );
-
+ 
       if (!data)
         return res
           .status(401)
           .json(new ApiResponse(400, {}, `Foundation not found`));
-
+ 
       data.logo = data.logo
         ? `${process.env.BASE_URL}/foundation/logo/${data.logo}`
         : `${process.env.DEFAULT_IMAGE}`;
-
+ 
       return res
         .status(200)
         .json(
           new ApiResponse(200, data, `Foundation data fetched successfully`)
         );
     }
-
-    const data = await Foundation.find({ userId: req.user.id });
-
+ 
+    const data = await Foundation.find();
+ 
     if (!data || data.length < 0)
       return res.status(401).json(new ApiResponse(400, {}, `data not found`));
-
+ 
     data.map((item) => {
       item.logo = item.logo
         ? `${process.env.BASE_URL}/foundation/logo/${item.logo}`
         : `${process.env.DEFAULT_IMAGE}`;
     });
-
+ 
     return res
       .status(200)
       .json(new ApiResponse(200, data, `Foundation data fetched successfully`));
@@ -266,23 +261,23 @@ export const getCampaignHandle = async (req, res) => {
     const schema = Joi.object({
       foundationId: Joi.string().required(),
     });
-
+ 
     const { error } = schema.validate({ foundationId });
-
+ 
     if (error)
       return res
         .status(400)
         .json(new ApiResponse(400, {}, error.details[0].message));
-
+ 
     const foundation = await Foundation.findOne({
       _id: foundationId,
-      userId: req.user.id,
+ 
     });
     if (!foundation)
       return res
         .status(404)
         .json(new ApiResponse(404, {}, `foundation not found`));
-
+ 
     if (campaignId) {
       const campaign = await Campaign.findOne({ _id: campaignId })
         .populate("participants", "_id fullName avatar")
@@ -291,11 +286,11 @@ export const getCampaignHandle = async (req, res) => {
         return res
           .status(404)
           .json(new ApiResponse(404, {}, `campaign not found`));
-
+ 
       campaign.image = campaign.image
         ? `${process.env.BASE_URL}/foundation/campaign/${campaign.image}`
         : process.env.DEFAULT_IMAGE;
-
+ 
       campaign.participants.map((item) => {
         item.avatar = item.avatar
           ? `${process.env.BASE_URL}/foundation/logo/${item.image}`
@@ -305,16 +300,16 @@ export const getCampaignHandle = async (req, res) => {
         .status(201)
         .json(new ApiResponse(200, campaign, `campaign fetched successfully`));
     }
-
+ 
     const campaigns = await Campaign.find({
       foundation: foundationId,
     })
       .populate("participants", "_id fullName avatar")
       .select("-__v -createdAt -updatedAt");
-
+ 
     if (!campaigns || campaigns.length == 0)
       return res.status(401).json(new ApiResponse(400, {}, `data not found`));
-
+ 
     campaigns.map((data) => {
       data.image = data.image
         ? `${process.env.BASE_URL}/foundation/campaign/${data.image}`
@@ -326,7 +321,7 @@ export const getCampaignHandle = async (req, res) => {
           : process.env.DEFAULT_PROFILE_PIC;
       });
     });
-
+ 
     return res
       .status(201)
       .json(new ApiResponse(200, campaigns, `campaigns fetched successfully`));
