@@ -3,7 +3,13 @@ import {
   createFoundationHandle,
   updateFoundationHandle,
   getFoundationHandle,
-  createCampaignHandle
+  createCampaignHandle,
+  getCampaignHandle,
+  deleteCampaignHandle,
+  deleteFoundationHandle,
+  addFaqHandle,
+  deleteFaqHandle,
+  getFaqHandle
 } from "../controllers/admin.controller.js";
 import { auth, isAdmin } from "../middlewares/auth.js";
 import { upload } from "../middlewares/multer.js";
@@ -27,9 +33,22 @@ adminRouter.patch(
   setUploadPath("foundation/logo"),
   upload.single("logo"),
   updateFoundationHandle
-);
+)
 
-adminRouter.get("/foundation", auth, isAdmin, getFoundationHandle)
-adminRouter.post("/create-campaign", auth, isAdmin, setUploadPath("foundation/campaign"), createCampaignHandle)
+adminRouter.delete("/foundation", auth, isAdmin, deleteFoundationHandle)
+adminRouter.get("/foundation", auth, getFoundationHandle)
+
+
+adminRouter.post("/campaign", auth, isAdmin, setUploadPath("foundation/campaign"), upload.single("image"),createCampaignHandle)
+adminRouter.get("/campaign", auth, getCampaignHandle)
+adminRouter.delete("/campaign", auth, isAdmin, deleteCampaignHandle)
+
+
+
+adminRouter.post("/faq", auth, isAdmin, addFaqHandle)
+adminRouter.get("/faq", getFaqHandle)
+adminRouter.delete("/faq", auth, isAdmin, deleteFaqHandle)
+
+
 
 export default adminRouter;
