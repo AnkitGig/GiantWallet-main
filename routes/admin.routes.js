@@ -36,12 +36,13 @@ adminRouter.patch(
 )
 
 adminRouter.delete("/foundation", auth, isAdmin, deleteFoundationHandle)
-adminRouter.get("/foundation", auth, getFoundationHandle)
+adminRouter.get("/foundation",   getFoundationHandle)
 
 
-adminRouter.post("/campaign", auth, isAdmin, setUploadPath("foundation/campaign"), upload.single("image"),createCampaignHandle)
-adminRouter.get("/campaign", auth, getCampaignHandle)
-adminRouter.delete("/campaign", auth, isAdmin, deleteCampaignHandle)
+adminRouter.post("/campaign", auth, isAdmin, setUploadPath("foundation/campaign"), upload.single("image"), createCampaignHandle)
+
+adminRouter.get("/campaign",  getCampaignHandle)
+adminRouter.delete("/campaign", isAdmin, deleteCampaignHandle)
 
 
 
