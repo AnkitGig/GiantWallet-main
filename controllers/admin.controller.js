@@ -296,12 +296,18 @@ export const getCampaignHandle = async (req, res) => {
 
       campaign.participants.map((item) => {
         item.avatar = item.avatar
-          ? `${process.env.BASE_URL}/foundation/logo/${item.image}`
+          ? `${process.env.BASE_URL}/foundation/logo/${item.avatar}`
           : process.env.DEFAULT_PROFILE_PIC;
       });
+
+      // Add foundation name to response
+      const response = {
+        ...campaign.toObject(),
+        foundationName: foundation.name,
+      };
       return res
         .status(201)
-        .json(new ApiResponse(200, campaign, `campaign fetched successfully`));
+        .json(new ApiResponse(200, response, `campaign fetched successfully`));
     }
 
     const campaigns = await Campaign.find({
@@ -313,21 +319,25 @@ export const getCampaignHandle = async (req, res) => {
     if (!campaigns || campaigns.length == 0)
       return res.status(401).json(new ApiResponse(400, {}, `data not found`));
 
-    campaigns.map((data) => {
+    // Add foundation name to each campaign response
+    const campaignsWithFoundation = campaigns.map((data) => {
       data.image = data.image
         ? `${process.env.BASE_URL}/foundation/campaign/${data.image}`
         : process.env.DEFAULT_IMAGE;
       data.participants.map((item) => {
-        console.log("---------------->", item);
         item.avatar = item.avatar
           ? `${process.env.BASE_URL}/foundation/logo/${item.avatar}`
           : process.env.DEFAULT_PROFILE_PIC;
       });
+      return {
+        ...data.toObject(),
+        foundationName: foundation.name,
+      };
     });
 
     return res
       .status(201)
-      .json(new ApiResponse(200, campaigns, `campaigns fetched successfully`));
+      .json(new ApiResponse(200, campaignsWithFoundation, `campaigns fetched successfully`));
   } catch (error) {
     console.log(`error while getting campaign ${error}`);
     res.status(500).json(new ApiResponse(500, {}, `Internal server error`));
