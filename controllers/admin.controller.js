@@ -295,9 +295,14 @@ export const getCampaignHandle = async (req, res) => {
         : process.env.DEFAULT_IMAGE;
 
       campaign.participants.map((item) => {
-        item.avatar = item.avatar
-          ? `${process.env.BASE_URL}/foundation/logo/${item.avatar}`
-          : process.env.DEFAULT_PROFILE_PIC;
+          if (item.avatar) {
+            // If avatar is a filename (not a full URL), prepend logo path
+            item.avatar = item.avatar.startsWith('http')
+              ? item.avatar
+              : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
+          } else {
+            item.avatar = process.env.DEFAULT_PROFILE_PIC;
+          }
       });
 
       // Add foundation name to response
@@ -324,11 +329,15 @@ export const getCampaignHandle = async (req, res) => {
       data.image = data.image
         ? `${process.env.BASE_URL}/foundation/campaign/${data.image}`
         : process.env.DEFAULT_IMAGE;
-      data.participants.map((item) => {
-        item.avatar = item.avatar
-          ? `${process.env.BASE_URL}/foundation/logo/${item.avatar}`
-          : process.env.DEFAULT_PROFILE_PIC;
-      });
+        data.participants.map((item) => {
+          if (item.avatar) {
+            item.avatar = item.avatar.startsWith('http')
+              ? item.avatar
+              : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
+          } else {
+            item.avatar = process.env.DEFAULT_PROFILE_PIC;
+          }
+        });
       return {
         ...data.toObject(),
         foundationName: foundation.name,
