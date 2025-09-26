@@ -41,7 +41,7 @@ adminRouter.get("/foundation",   getFoundationHandle)
 
 adminRouter.post("/campaign", auth, isAdmin, setUploadPath("foundation/campaign"), upload.single("image"), createCampaignHandle)
 
-adminRouter.post("/getcampaign",  getCampaignHandle)
+adminRouter.get("/campaign",  getCampaignHandle)
 adminRouter.delete("/campaign", isAdmin, deleteCampaignHandle)
 
 
