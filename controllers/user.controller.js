@@ -277,6 +277,7 @@ export const loginHandle = async (req, res) => {
       role: user.role,
       isPinCreated: user.pin ? true : false,
       token: token,
+      avatar: user.avatar ? user.avatar : `${process.env.DEFAULT_PROFILE_PIC}`,
     };
 
     // res.cookie("token", token, {
