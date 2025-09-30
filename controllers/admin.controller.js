@@ -6,7 +6,7 @@ import { Campaign } from "../models/foundation/campaign.js";
 import { Faq } from "../models/admin/Faq.js";
 import { deleteOldImages } from "../utils/helpers.js";
 import { parseJsonArray } from "../utils/helpers.js";
-import cloudinary from "../utils/cloudinary.js";
+import customUploader from "../utils/customUploader.js";
 
 export const createFoundationHandle = async (req, res) => {
   try {
@@ -27,23 +27,13 @@ export const createFoundationHandle = async (req, res) => {
     const user = await User.findOne({ _id: req.user.id });
     if (!user)
       return res.status(404).json(new ApiResponse(404, {}, `User not found`));
-
     let logoUrl = null;
-    if (req.file && req.file.path) {
-      // Upload to Cloudinary
-      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-        folder: "foundation/logo"
+    if (req.file) {
+      logoUrl = await customUploader({
+        file: req.file,
+        folder: "foundation/logo",
       });
-      logoUrl = uploadResult.secure_url;
-      // Delete local file after upload
-      try {
-        const fs = await import('fs');
-        fs.unlinkSync(req.file.path);
-      } catch (e) {
-        console.log('Error deleting local file:', e);
-      }
     }
-
     await Foundation.create({
       name,
       description,
@@ -51,7 +41,6 @@ export const createFoundationHandle = async (req, res) => {
       website: website ? website : null,
       userId: user._id,
     });
-
     return res
       .status(200)
       .json(new ApiResponse(200, {}, `foundation created successfully`));
@@ -70,7 +59,6 @@ export const updateFoundationHandle = async (req, res) => {
       description: Joi.string().min(10).max(500).optional(),
       website: Joi.string().optional(),
     });
-
     const { error } = schema.validate(req.body);
 
     if (error)
@@ -88,44 +76,18 @@ export const updateFoundationHandle = async (req, res) => {
       return res
         .status(404)
         .json(new ApiResponse(404, {}, `Foundation not found`));
-
-    // If updating logo, delete old image from Cloudinary
-    if (req.file && req.file.path) {
-      if (foundation.logo) {
-        // Extract public_id from URL
-        const publicIdMatch = foundation.logo.match(/foundation\/logo\/([^\.\/]+)\.[a-zA-Z0-9]+$/);
-        let publicId = null;
-        if (publicIdMatch && publicIdMatch[1]) {
-          publicId = `foundation/logo/${publicIdMatch[1]}`;
-        }
-        if (publicId) {
-          try {
-            await cloudinary.uploader.destroy(publicId);
-          } catch (e) {
-            console.log('Cloudinary delete error:', e);
-          }
-        }
-      }
-      // Upload new logo
-      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
-        folder: "foundation/logo"
+    if (req.file) {
+      const newLogoUrl = await customUploader({
+        file: req.file,
+        oldUrl: foundation.logo,
+        folder: "foundation/logo",
       });
-      foundation.logo = uploadResult.secure_url;
-      // Delete local file after upload
-      try {
-        const fs = await import('fs');
-        fs.unlinkSync(req.file.path);
-      } catch (e) {
-        console.log('Error deleting local file:', e);
-      }
+      foundation.logo = newLogoUrl;
     }
-
     if (name) foundation.name = name;
     if (description) foundation.description = description;
     if (website) foundation.website = website;
-
     await foundation.save();
-
     return res
       .status(201)
       .json(new ApiResponse(200, {}, `foundation update successful`));
@@ -150,7 +112,6 @@ export const getFoundationHandle = async (req, res) => {
           .status(401)
           .json(new ApiResponse(400, {}, `Foundation not found`));
 
-      // If logo is not set, use default image
       data.logo = data.logo ? data.logo : `${process.env.DEFAULT_IMAGE}`;
 
       return res
@@ -216,21 +177,12 @@ export const deleteFoundationHandle = async (req, res) => {
       await campaign.deleteOne();
     }
 
-    // Delete logo from Cloudinary if exists
     if (foundation.logo) {
-      // Extract public_id from URL
-      const publicIdMatch = foundation.logo.match(/foundation\/logo\/([^\.\/]+)\.[a-zA-Z0-9]+$/);
-      let publicId = null;
-      if (publicIdMatch && publicIdMatch[1]) {
-        publicId = `foundation/logo/${publicIdMatch[1]}`;
-      }
-      if (publicId) {
-        try {
-          await cloudinary.uploader.destroy(publicId);
-        } catch (e) {
-          console.log('Cloudinary delete error:', e);
-        }
-      }
+      await customUploader({
+        file: null,
+        oldUrl: foundation.logo,
+        folder: "foundation/logo",
+      });
     }
 
     await Foundation.deleteOne({ _id: id });
@@ -324,7 +276,6 @@ export const getCampaignHandle = async (req, res) => {
 
     const foundation = await Foundation.findOne({
       _id: foundationId,
- 
     });
     if (!foundation)
       return res
@@ -345,14 +296,14 @@ export const getCampaignHandle = async (req, res) => {
         : process.env.DEFAULT_IMAGE;
 
       campaign.participants.map((item) => {
-          if (item.avatar) {
-            // If avatar is a filename (not a full URL), prepend logo path
-            item.avatar = item.avatar.startsWith('http')
-              ? item.avatar
-              : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
-          } else {
-            item.avatar = process.env.DEFAULT_PROFILE_PIC;
-          }
+        if (item.avatar) {
+          // If avatar is a filename (not a full URL), prepend logo path
+          item.avatar = item.avatar.startsWith("http")
+            ? item.avatar
+            : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
+        } else {
+          item.avatar = process.env.DEFAULT_PROFILE_PIC;
+        }
       });
 
       // Add foundation name to response
@@ -379,15 +330,15 @@ export const getCampaignHandle = async (req, res) => {
       data.image = data.image
         ? `${process.env.BASE_URL}/foundation/campaign/${data.image}`
         : process.env.DEFAULT_IMAGE;
-        data.participants.map((item) => {
-          if (item.avatar) {
-            item.avatar = item.avatar.startsWith('http')
-              ? item.avatar
-              : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
-          } else {
-            item.avatar = process.env.DEFAULT_PROFILE_PIC;
-          }
-        });
+      data.participants.map((item) => {
+        if (item.avatar) {
+          item.avatar = item.avatar.startsWith("http")
+            ? item.avatar
+            : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
+        } else {
+          item.avatar = process.env.DEFAULT_PROFILE_PIC;
+        }
+      });
       return {
         ...data.toObject(),
         foundationName: foundation.name,
@@ -396,7 +347,13 @@ export const getCampaignHandle = async (req, res) => {
 
     return res
       .status(201)
-      .json(new ApiResponse(200, campaignsWithFoundation, `campaigns fetched successfully`));
+      .json(
+        new ApiResponse(
+          200,
+          campaignsWithFoundation,
+          `campaigns fetched successfully`
+        )
+      );
   } catch (error) {
     console.log(`error while getting campaign ${error}`);
     res.status(500).json(new ApiResponse(500, {}, `Internal server error`));
@@ -494,7 +451,7 @@ export const addFaqHandle = async (req, res) => {
 
 export const getFaqHandle = async (req, res) => {
   try {
-    const data = await Faq.find().select("-__v -createdAt -updatedAt")
+    const data = await Faq.find().select("-__v -createdAt -updatedAt");
 
     return res
       .status(201)
