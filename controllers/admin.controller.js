@@ -6,6 +6,7 @@ import { Campaign } from "../models/foundation/campaign.js";
 import { Faq } from "../models/admin/Faq.js";
 import { deleteOldImages } from "../utils/helpers.js";
 import { parseJsonArray } from "../utils/helpers.js";
+import cloudinary from "../utils/cloudinary.js";
 
 export const createFoundationHandle = async (req, res) => {
   try {
@@ -27,10 +28,26 @@ export const createFoundationHandle = async (req, res) => {
     if (!user)
       return res.status(404).json(new ApiResponse(404, {}, `User not found`));
 
+    let logoUrl = null;
+    if (req.file && req.file.path) {
+      // Upload to Cloudinary
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "foundation/logo"
+      });
+      logoUrl = uploadResult.secure_url;
+      // Delete local file after upload
+      try {
+        const fs = await import('fs');
+        fs.unlinkSync(req.file.path);
+      } catch (e) {
+        console.log('Error deleting local file:', e);
+      }
+    }
+
     await Foundation.create({
       name,
       description,
-      logo: req.file ? req.file.filename : null,
+      logo: logoUrl,
       website: website ? website : null,
       userId: user._id,
     });
@@ -72,15 +89,40 @@ export const updateFoundationHandle = async (req, res) => {
         .status(404)
         .json(new ApiResponse(404, {}, `Foundation not found`));
 
-    if (req.file) deleteOldImages("foundation/logo", foundation.logo);
+    // If updating logo, delete old image from Cloudinary
+    if (req.file && req.file.path) {
+      if (foundation.logo) {
+        // Extract public_id from URL
+        const publicIdMatch = foundation.logo.match(/foundation\/logo\/([^\.\/]+)\.[a-zA-Z0-9]+$/);
+        let publicId = null;
+        if (publicIdMatch && publicIdMatch[1]) {
+          publicId = `foundation/logo/${publicIdMatch[1]}`;
+        }
+        if (publicId) {
+          try {
+            await cloudinary.uploader.destroy(publicId);
+          } catch (e) {
+            console.log('Cloudinary delete error:', e);
+          }
+        }
+      }
+      // Upload new logo
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "foundation/logo"
+      });
+      foundation.logo = uploadResult.secure_url;
+      // Delete local file after upload
+      try {
+        const fs = await import('fs');
+        fs.unlinkSync(req.file.path);
+      } catch (e) {
+        console.log('Error deleting local file:', e);
+      }
+    }
 
-    name ? (foundation.name = name) : foundation.name;
-    description
-      ? (foundation.description = description)
-      : foundation.description;
-    website ? (foundation.website = website) : foundation.website;
-
-    req.file ? (foundation.logo = req.file.filename) : foundation.logo;
+    if (name) foundation.name = name;
+    if (description) foundation.description = description;
+    if (website) foundation.website = website;
 
     await foundation.save();
 
@@ -97,8 +139,6 @@ export const getFoundationHandle = async (req, res) => {
   try {
     const { id } = req.query;
 
-
-
     if (id) {
       const data = await Foundation.findOne({ _id: id }).populate(
         "userId",
@@ -110,9 +150,8 @@ export const getFoundationHandle = async (req, res) => {
           .status(401)
           .json(new ApiResponse(400, {}, `Foundation not found`));
 
-      data.logo = data.logo
-        ? `${process.env.BASE_URL}/foundation/logo/${data.logo}`
-        : `${process.env.DEFAULT_IMAGE}`;
+      // If logo is not set, use default image
+      data.logo = data.logo ? data.logo : `${process.env.DEFAULT_IMAGE}`;
 
       return res
         .status(200)
@@ -127,9 +166,7 @@ export const getFoundationHandle = async (req, res) => {
       return res.status(401).json(new ApiResponse(400, {}, `data not found`));
 
     data.map((item) => {
-      item.logo = item.logo
-        ? `${process.env.BASE_URL}/foundation/logo/${item.logo}`
-        : `${process.env.DEFAULT_IMAGE}`;
+      item.logo = item.logo ? item.logo : `${process.env.DEFAULT_IMAGE}`;
     });
 
     return res
@@ -179,8 +216,21 @@ export const deleteFoundationHandle = async (req, res) => {
       await campaign.deleteOne();
     }
 
+    // Delete logo from Cloudinary if exists
     if (foundation.logo) {
-      deleteOldImages("foundation/logo", foundation.logo);
+      // Extract public_id from URL
+      const publicIdMatch = foundation.logo.match(/foundation\/logo\/([^\.\/]+)\.[a-zA-Z0-9]+$/);
+      let publicId = null;
+      if (publicIdMatch && publicIdMatch[1]) {
+        publicId = `foundation/logo/${publicIdMatch[1]}`;
+      }
+      if (publicId) {
+        try {
+          await cloudinary.uploader.destroy(publicId);
+        } catch (e) {
+          console.log('Cloudinary delete error:', e);
+        }
+      }
     }
 
     await Foundation.deleteOne({ _id: id });
