@@ -241,12 +241,20 @@ export const createCampaignHandle = async (req, res) => {
         .status(404)
         .json(new ApiResponse(404, {}, `foundation not found`));
 
+    let imageUrl = "";
+    if (req.file) {
+      imageUrl = await customUploader({
+        file: req.file,
+        folder: "foundation/campaign",
+      });
+    }
+
     const data = await Campaign.create({
       foundation: foundationId,
       title: title,
       description: description,
       eventDate: eventDate,
-      image: req.file ? req.file.filename : "",
+      image: imageUrl,
       location: location,
       participants: participants,
     });
@@ -282,6 +290,19 @@ export const getCampaignHandle = async (req, res) => {
         .status(404)
         .json(new ApiResponse(404, {}, `foundation not found`));
 
+    const getImageUrl = (image) => {
+      if (!image) return process.env.DEFAULT_IMAGE;
+      if (typeof image === "string" && image.startsWith("http")) return image;
+      return `${process.env.BASE_URL}/foundation/campaign/${image}`;
+    };
+
+    const getAvatarUrl = (avatar) => {
+      if (!avatar) return process.env.DEFAULT_PROFILE_PIC;
+      if (typeof avatar === "string" && avatar.startsWith("http"))
+        return avatar;
+      return `${process.env.BASE_URL}/foundation/logo/${avatar}`;
+    };
+
     if (campaignId) {
       const campaign = await Campaign.findOne({ _id: campaignId })
         .populate("participants", "_id fullName avatar")
@@ -291,22 +312,12 @@ export const getCampaignHandle = async (req, res) => {
           .status(404)
           .json(new ApiResponse(404, {}, `campaign not found`));
 
-      campaign.image = campaign.image
-        ? `${process.env.BASE_URL}/foundation/campaign/${campaign.image}`
-        : process.env.DEFAULT_IMAGE;
+      campaign.image = getImageUrl(campaign.image);
 
       campaign.participants.map((item) => {
-        if (item.avatar) {
-          // If avatar is a filename (not a full URL), prepend logo path
-          item.avatar = item.avatar.startsWith("http")
-            ? item.avatar
-            : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
-        } else {
-          item.avatar = process.env.DEFAULT_PROFILE_PIC;
-        }
+        item.avatar = getAvatarUrl(item.avatar);
       });
 
-      // Add foundation name to response
       const response = {
         ...campaign.toObject(),
         foundationName: foundation.name,
@@ -325,19 +336,10 @@ export const getCampaignHandle = async (req, res) => {
     if (!campaigns || campaigns.length == 0)
       return res.status(401).json(new ApiResponse(400, {}, `data not found`));
 
-    // Add foundation name to each campaign response
     const campaignsWithFoundation = campaigns.map((data) => {
-      data.image = data.image
-        ? `${process.env.BASE_URL}/foundation/campaign/${data.image}`
-        : process.env.DEFAULT_IMAGE;
+      data.image = getImageUrl(data.image);
       data.participants.map((item) => {
-        if (item.avatar) {
-          item.avatar = item.avatar.startsWith("http")
-            ? item.avatar
-            : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
-        } else {
-          item.avatar = process.env.DEFAULT_PROFILE_PIC;
-        }
+        item.avatar = getAvatarUrl(item.avatar);
       });
       return {
         ...data.toObject(),
@@ -402,7 +404,13 @@ export const deleteCampaignHandle = async (req, res) => {
         .status(404)
         .json(new ApiResponse(404, {}, `foundation not found`));
 
-    deleteOldImages("foundation/campaign", campaign.image);
+    if (campaign.image) {
+      if (typeof campaign.image === "string" && campaign.image.startsWith("http")) {
+        await customUploader({ file: null, oldUrl: campaign.image, folder: "foundation/campaign" });
+      } else {
+        deleteOldImages("foundation/campaign", campaign.image);
+      }
+    }
     await Campaign.deleteOne({
       _id: campaignId,
     });
