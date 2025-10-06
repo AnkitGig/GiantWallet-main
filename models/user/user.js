@@ -65,6 +65,11 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    isBioMeteric: {
+      type: Boolean,
+      default: false,
+    }, 
+
     role: {
       type: String,
       enum: ["user", "admin", "superAdmin"],
@@ -86,8 +91,10 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
-
-
+    registerId:{
+      type: String,
+      default: null
+    }
   },
   {
     timestamps: true,

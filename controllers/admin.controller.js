@@ -2,6 +2,7 @@ import Joi from "joi";
 import { User } from "../models/user/user.js";
 import { ApiResponse } from "../utils/ApiReponse.js";
 import { Foundation } from "../models/foundation/foundation.js";
+import { Group } from "../models/group/Group.js";
 import { Campaign } from "../models/foundation/campaign.js";
 import { Faq } from "../models/admin/Faq.js";
 import { deleteOldImages } from "../utils/helpers.js";
@@ -9,8 +10,9 @@ import { parseJsonArray } from "../utils/helpers.js";
 
 export const createFoundationHandle = async (req, res) => {
   try {
-    const { name, description, website } = req.body;
+    const { groupId, name, description, website } = req.body;
     const schema = Joi.object({
+      groupId: Joi.string().required(),
       name: Joi.string().min(3).required(),
       description: Joi.string().min(10).max(500).required(),
       website: Joi.string().optional(),
@@ -27,12 +29,22 @@ export const createFoundationHandle = async (req, res) => {
     if (!user)
       return res.status(404).json(new ApiResponse(404, {}, `User not found`));
 
+    const group = await Group.findOne({ _id: groupId });
+    if (!group)
+      return res.status(404).json(new ApiResponse(404, {}, `Group not found`));
+
+    if (group.status == "inactive")
+      return res
+        .status(404)
+        .json(new ApiResponse(404, {}, `Group is inactive`));
+
     await Foundation.create({
       name,
       description,
       logo: req.file ? req.file.filename : null,
       website: website ? website : null,
       userId: user._id,
+      groupId,
     });
 
     return res
@@ -96,8 +108,6 @@ export const updateFoundationHandle = async (req, res) => {
 export const getFoundationHandle = async (req, res) => {
   try {
     const { id } = req.query;
-
-
 
     if (id) {
       const data = await Foundation.findOne({ _id: id }).populate(
@@ -274,7 +284,6 @@ export const getCampaignHandle = async (req, res) => {
 
     const foundation = await Foundation.findOne({
       _id: foundationId,
- 
     });
     if (!foundation)
       return res
@@ -295,24 +304,13 @@ export const getCampaignHandle = async (req, res) => {
         : process.env.DEFAULT_IMAGE;
 
       campaign.participants.map((item) => {
-          if (item.avatar) {
-            // If avatar is a filename (not a full URL), prepend logo path
-            item.avatar = item.avatar.startsWith('http')
-              ? item.avatar
-              : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
-          } else {
-            item.avatar = process.env.DEFAULT_PROFILE_PIC;
-          }
+        item.avatar = item.avatar
+          ? `${process.env.BASE_URL}/foundation/logo/${item.image}`
+          : process.env.DEFAULT_PROFILE_PIC;
       });
-
-      // Add foundation name to response
-      const response = {
-        ...campaign.toObject(),
-        foundationName: foundation.name,
-      };
       return res
         .status(201)
-        .json(new ApiResponse(200, response, `campaign fetched successfully`));
+        .json(new ApiResponse(200, campaign, `campaign fetched successfully`));
     }
 
     const campaigns = await Campaign.find({
@@ -324,29 +322,27 @@ export const getCampaignHandle = async (req, res) => {
     if (!campaigns || campaigns.length == 0)
       return res.status(401).json(new ApiResponse(400, {}, `data not found`));
 
-    // Add foundation name to each campaign response
-    const campaignsWithFoundation = campaigns.map((data) => {
+    campaigns.forEach((data) => {
       data.image = data.image
         ? `${process.env.BASE_URL}/foundation/campaign/${data.image}`
         : process.env.DEFAULT_IMAGE;
-        data.participants.map((item) => {
-          if (item.avatar) {
-            item.avatar = item.avatar.startsWith('http')
-              ? item.avatar
-              : `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
-          } else {
+
+      if (data.participants && data.participants.length > 0) {
+        data.participants.forEach((item) => {
+          if (!item.avatar) {
             item.avatar = process.env.DEFAULT_PROFILE_PIC;
+          } else if (item.avatar.startsWith("http")) {
+            item.avatar = item.avatar;
+          } else {
+            item.avatar = `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
           }
         });
-      return {
-        ...data.toObject(),
-        foundationName: foundation.name,
-      };
+      }
     });
 
     return res
       .status(201)
-      .json(new ApiResponse(200, campaignsWithFoundation, `campaigns fetched successfully`));
+      .json(new ApiResponse(200, campaigns, `campaigns fetched successfully`));
   } catch (error) {
     console.log(`error while getting campaign ${error}`);
     res.status(500).json(new ApiResponse(500, {}, `Internal server error`));
@@ -444,7 +440,7 @@ export const addFaqHandle = async (req, res) => {
 
 export const getFaqHandle = async (req, res) => {
   try {
-    const data = await Faq.find().select("-__v -createdAt -updatedAt")
+    const data = await Faq.find().select("-__v -createdAt -updatedAt");
 
     return res
       .status(201)
@@ -474,6 +470,39 @@ export const deleteFaqHandle = async (req, res) => {
     res.status(201).json(new ApiResponse(200, {}, `faq deleted successfully`));
   } catch (error) {
     console.log(`error while deleting faq ${error}`);
+    res.status(500).json(new ApiResponse(500, {}, `Internal server error`));
+  }
+};
+
+export const creatGroupHandle = async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    const schema = Joi.object({
+      name: Joi.string().min(3).required(),
+      description: Joi.string().min(10).max(500).required(),
+    });
+
+    const { error } = schema.validate(req.body);
+
+    if (error)
+      return res
+        .status(400)
+        .json(new ApiResponse(400, {}, error.details[0].message));
+
+    const user = await User.findOne({ _id: req.user.id });
+    if (!user)
+      return res.status(404).json(new ApiResponse(404, {}, `User not found`));
+
+    await Group.create({
+      name,
+      description,
+    });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, {}, `Group created successfully`));
+  } catch (error) {
+    console.log(`error while creating group ${error}`);
     res.status(500).json(new ApiResponse(500, {}, `Internal server error`));
   }
 };

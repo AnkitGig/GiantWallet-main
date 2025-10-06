@@ -7,7 +7,6 @@ import { User } from "../models/user/user.js";
 import { sendOtpMail, sendOtpforgotPasswordMail } from "../utils/email.js";
 import { deleteOldImages } from "../utils/helpers.js";
 
-
 export const registerHandle = async (req, res) => {
   try {
     const { fullName, email, phone, password } = req.body;
@@ -63,14 +62,14 @@ export const registerHandle = async (req, res) => {
       otpExpireAt,
     });
 
-    // let msg = `Your verification code is ${otp}. It will expire in 5 minutes. Do not share this code with anyone`;
-    // const smsResult = await sendSms(phone, msg);
-    // if (!smsResult.success)
-    //   return res
-    //     .status(403)
-    //     .json(
-    //       new ApiResponse(400, {}, `Something went wrong while sending sms`)
-    //     );
+    let msg = `Your verification code is ${otp}. It will expire in 5 minutes. Do not share this code with anyone`;
+    const smsResult = await sendSms(phone, msg);
+    if (!smsResult.success)
+      return res
+        .status(403)
+        .json(
+          new ApiResponse(400, {}, `Something went wrong while sending sms`)
+        );
 
     await sendOtpMail(fullName, otp, email);
     await user.save();
@@ -231,10 +230,11 @@ export const resendOtpHandle = async (req, res) => {
 
 export const loginHandle = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, registerId } = req.body;
     const schema = Joi.object({
       email: Joi.string().email().required(),
       password: Joi.string().min(6).required(),
+      registerId: Joi.string().optional(),
     });
 
     const { error } = schema.validate(req.body);
@@ -269,6 +269,9 @@ export const loginHandle = async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "30d" }
     );
+
+    registerId ? (user.registerId = registerId) : null;
+    await user.save();
 
     const userData = {
       userId: user._id,
@@ -540,11 +543,12 @@ export const changePinHandle = async (req, res) => {
 
 export const updateProfileHandle = async (req, res) => {
   try {
-    const { fullName, latitude, longitude } = req.body;
+    const { fullName, latitude, longitude, bioMetricStatus } = req.body;
     const schema = Joi.object({
       fullName: Joi.string().min(3).max(30).optional(),
       latitude: Joi.string().optional(),
       longitude: Joi.string().optional(),
+      bioMetricStatus: Joi.boolean().optional(),
     });
 
     // console.log("req.file -------->", req.file)
@@ -567,6 +571,11 @@ export const updateProfileHandle = async (req, res) => {
       ? ((user.latitude = latitude), (user.longitude = longitude))
       : user.latitude,
       user.longitude;
+
+    if (bioMetricStatus !== undefined) {
+      user.isBioMeteric =
+        bioMetricStatus === "true" || bioMetricStatus === true;
+    }
 
     await user.save();
 
@@ -702,6 +711,19 @@ export const changePasswordHandle = async (req, res) => {
       .json(new ApiResponse(200, {}, `Password changed successfully.`));
   } catch (error) {
     console.log(`Error while changing password :`, error);
+    return res
+      .status(501)
+      .json(new ApiResponse(500, {}, `Internal Server Error`));
+  }
+};
+
+export const bioMetricLogin = async (req, res) => {
+  try {
+  
+
+
+  } catch (error) {
+    console.log(`Error while login with bio metric :`, error);
     return res
       .status(501)
       .json(new ApiResponse(500, {}, `Internal Server Error`));
