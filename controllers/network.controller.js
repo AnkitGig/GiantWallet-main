@@ -131,13 +131,27 @@ export const addNetworkHandle = async (req, res) => {
 export const listNetworksHandle = async (req, res) => {
   try {
     const userId = req.user.id;
-    const networks = await Network.find({ userId }).sort({ createdAt: -1 });
-    return res.status(200).json(new ApiResponse(200, networks, `Networks fetched successfully`));
+
+    
+    const networks = await Network.find({
+      $or: [
+        { isCustom: false },       
+        { userId: userId },        
+      ],
+      isActive: true,               
+    }).sort({ createdAt: -1 });
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, networks, "Networks fetched successfully"));
   } catch (error) {
     console.error("Error in listNetworksHandle:", error);
-    return res.status(500).json(new ApiResponse(500, {}, `Internal server error`));
+    return res
+      .status(500)
+      .json(new ApiResponse(500, {}, "Internal server error"));
   }
 };
+
 
 export const deleteNetworkHandle = async (req, res) => {
   try {

@@ -14,7 +14,7 @@ const networkSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false, // optional for default networks
     },
     name: { type: String, required: true },
     chainId: { type: Number, required: true },
@@ -26,12 +26,12 @@ const networkSchema = new mongoose.Schema(
     icon: { type: String, default: null },
     isCustom: { type: Boolean, default: true },
     isActive: { type: Boolean, default: true },
+    isDefault: { type: Boolean, default: false }, // ✅ added
     tags: [{ type: String }],
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
+
 
 // ensure a user can't add the same chainId twice
 networkSchema.index({ userId: 1, chainId: 1 }, { unique: true, sparse: true });
