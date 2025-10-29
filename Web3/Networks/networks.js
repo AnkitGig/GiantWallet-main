@@ -4,7 +4,7 @@ export const defaultNetworks = [
     name: "Ethereum Mainnet",
     chainId: 1,
     chainIdHex: "0x1",
-    rpcUrl: "https://mainnet.infura.io/v3/d3054a1990e845d482ff031e55e939b2d3054a1990e845d482ff031e55e939b2",
+    rpcUrl: "https://mainnet.infura.io/v3/d3054a1990e845d482ff031e55e939b2",
     blockExplorerUrl: "https://etherscan.io",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     symbol: "ETH",
@@ -16,7 +16,7 @@ export const defaultNetworks = [
     name: "Ethereum Sepolia",
     chainId: 11155111,
     chainIdHex: "0xaa36a7",
-    rpcUrl: "https://sepolia.infura.io/v3/d3054a1990e845d482ff031e55e939b2d3054a1990e845d482ff031e55e939b2",
+    rpcUrl: "https://sepolia.infura.io/v3/d3054a1990e845d482ff031e55e939b2",
     blockExplorerUrl: "https://sepolia.etherscan.io",
     nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
     symbol: "ETH",
@@ -30,7 +30,7 @@ export const defaultNetworks = [
     name: "Linea Mainnet",
     chainId: 59144,
     chainIdHex: "0xe708",
-    rpcUrl: "https://linea-mainnet.infura.io/v3/d3054a1990e845d482ff031e55e939b2d3054a1990e845d482ff031e55e939b2",
+    rpcUrl: "https://linea-mainnet.infura.io/v3/d3054a1990e845d482ff031e55e939b2",
     blockExplorerUrl: "https://lineascan.build",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
     symbol: "ETH",
@@ -42,7 +42,7 @@ export const defaultNetworks = [
     name: "Linea Sepolia",
     chainId: 59141,
     chainIdHex: "0xe705",
-    rpcUrl: "https://linea-sepolia.infura.io/v3/d3054a1990e845d482ff031e55e939b2d3054a1990e845d482ff031e55e939b2",
+    rpcUrl: "https://linea-sepolia.infura.io/v3/d3054a1990e845d482ff031e55e939b2",
     blockExplorerUrl: "https://sepolia.lineascan.build",
     nativeCurrency: { name: "Sepolia Ether", symbol: "ETH", decimals: 18 },
     symbol: "ETH",
@@ -261,30 +261,30 @@ export const defaultNetworks = [
 ];
 
 
-// import mongoose from "mongoose";
-// import Network from "../../models/network/network.js"
+import mongoose from "mongoose";
+import {Network} from "../../models/network/network.js"
 
-// const seedDefaultNetworks = async () => {
-//   try {
-//     await mongoose.connect(process.env.MONGO_URI);
+const seedDefaultNetworks = async () => {
+  try {
+    await mongoose.connect("mongodb+srv://thegiantwalletapp_db_user:thegiantwallet@cluster0.nuelqzd.mongodb.net/Giantwallet");
 
-//     for (const network of defaultNetworks) {
-//       const exists = await Network.findOne({ chainId: network.chainId, isCustom: false });
-//       if (!exists) {
-//         await Network.create(network);
-//         console.log(`✅ Added: ${network.name}`);
-//       } else {
-//         console.log(`⚠️ Already exists: ${network.name}`);
-//       }
-//     }
+    for (const network of defaultNetworks) {
+      const exists = await Network.findOne({ chainId: network.chainId, isCustom: false });
+      if (!exists) {
+        await Network.create(network);
+        console.log(`✅ Added: ${network.name}`);
+      } else {
+        console.log(`⚠️ Already exists: ${network.name}`);
+      }
+    }
 
-//     console.log("✅ Default networks seeding complete!");
-//     process.exit(0);
-//   } catch (error) {
-//     console.error("❌ Error seeding default networks:", error);
-//     process.exit(1);
-//   }
-// };
+    console.log("✅ Default networks seeding complete!");
+    process.exit(0);
+  } catch (error) {
+    console.error("❌ Error seeding default networks:", error);
+    process.exit(1);
+  }
+};
 
-// seedDefaultNetworks();
+seedDefaultNetworks();
 
