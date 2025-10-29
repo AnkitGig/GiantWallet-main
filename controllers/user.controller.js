@@ -6,6 +6,7 @@ import { generateOtp, getExpirationTime } from "../utils/helpers.js";
 import { User } from "../models/user/user.js";
 import { sendOtpMail, sendOtpforgotPasswordMail } from "../utils/email.js";
 import { deleteOldImages } from "../utils/helpers.js";
+import customUploader from "../utils/customUploader.js";
 
 export const registerHandle = async (req, res) => {
   try {
@@ -280,6 +281,7 @@ export const loginHandle = async (req, res) => {
       role: user.role,
       isPinCreated: user.pin ? true : false,
       token: token,
+      avatar: user.avatar ? user.avatar : `${process.env.DEFAULT_PROFILE_PIC}`,
     };
 
     // res.cookie("token", token, {
@@ -551,7 +553,6 @@ export const updateProfileHandle = async (req, res) => {
       bioMetricStatus: Joi.boolean().optional(),
     });
 
-    // console.log("req.file -------->", req.file)
     const { error } = schema.validate(req.body);
     if (error)
       return res
@@ -559,23 +560,22 @@ export const updateProfileHandle = async (req, res) => {
         .json({ status: false, message: error.details[0].message });
 
     const user = await User.findOne({ _id: req.user.id });
-    // console.log("user ----->", user);
     if (!user)
       return res.status(404).json(new ApiResponse(404, {}, `User not found`));
 
-    if (req.file) deleteOldImages("profile", user.avatar);
-
-    fullName ? (user.fullName = fullName) : user.fullName;
-    req.file ? (user.avatar = req.file.filename) : user.avatar;
-    latitude
-      ? ((user.latitude = latitude), (user.longitude = longitude))
-      : user.latitude,
-      user.longitude;
-
-    if (bioMetricStatus !== undefined) {
-      user.isBioMeteric =
-        bioMetricStatus === "true" || bioMetricStatus === true;
+    // Use customUploader for avatar upload/update
+    if (req.file) {
+      const avatarUrl = await customUploader({
+        file: req.file,
+        oldUrl: user.avatar,
+        folder: "profile",
+      });
+      user.avatar = avatarUrl;
     }
+
+    if (fullName) user.fullName = fullName;
+    if (latitude) user.latitude = latitude;
+    if (longitude) user.longitude = longitude;
 
     await user.save();
 
@@ -606,8 +606,10 @@ export const myProfileHandle = async (req, res) => {
           new ApiResponse(400, {}, `your account has been temporarily blocked.`)
         );
 
+
+    // If avatar is a Cloudinary URL, use as is, else fallback
     user.avatar = user.avatar
-      ? `${process.env.BASE_URL}/profile/${user.avatar}`
+      ? user.avatar
       : `${process.env.DEFAULT_PROFILE_PIC}`;
 
     return res

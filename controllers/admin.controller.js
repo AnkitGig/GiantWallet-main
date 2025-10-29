@@ -7,6 +7,7 @@ import { Campaign } from "../models/foundation/campaign.js";
 import { Faq } from "../models/admin/Faq.js";
 import { deleteOldImages } from "../utils/helpers.js";
 import { parseJsonArray } from "../utils/helpers.js";
+import customUploader from "../utils/customUploader.js";
 
 export const createFoundationHandle = async (req, res) => {
   try {
@@ -28,25 +29,21 @@ export const createFoundationHandle = async (req, res) => {
     const user = await User.findOne({ _id: req.user.id });
     if (!user)
       return res.status(404).json(new ApiResponse(404, {}, `User not found`));
-
-    const group = await Group.findOne({ _id: groupId });
-    if (!group)
-      return res.status(404).json(new ApiResponse(404, {}, `Group not found`));
-
-    if (group.status == "inactive")
-      return res
-        .status(404)
-        .json(new ApiResponse(404, {}, `Group is inactive`));
-
+    let logoUrl = null;
+    if (req.file) {
+      logoUrl = await customUploader({
+        file: req.file,
+        folder: "foundation/logo",
+      });
+    }
     await Foundation.create({
       name,
       description,
-      logo: req.file ? req.file.filename : null,
+      logo: logoUrl,
       website: website ? website : null,
       userId: user._id,
       groupId,
     });
-
     return res
       .status(200)
       .json(new ApiResponse(200, {}, `foundation created successfully`));
@@ -65,7 +62,6 @@ export const updateFoundationHandle = async (req, res) => {
       description: Joi.string().min(10).max(500).optional(),
       website: Joi.string().optional(),
     });
-
     const { error } = schema.validate(req.body);
 
     if (error)
@@ -83,19 +79,18 @@ export const updateFoundationHandle = async (req, res) => {
       return res
         .status(404)
         .json(new ApiResponse(404, {}, `Foundation not found`));
-
-    if (req.file) deleteOldImages("foundation/logo", foundation.logo);
-
-    name ? (foundation.name = name) : foundation.name;
-    description
-      ? (foundation.description = description)
-      : foundation.description;
-    website ? (foundation.website = website) : foundation.website;
-
-    req.file ? (foundation.logo = req.file.filename) : foundation.logo;
-
+    if (req.file) {
+      const newLogoUrl = await customUploader({
+        file: req.file,
+        oldUrl: foundation.logo,
+        folder: "foundation/logo",
+      });
+      foundation.logo = newLogoUrl;
+    }
+    if (name) foundation.name = name;
+    if (description) foundation.description = description;
+    if (website) foundation.website = website;
     await foundation.save();
-
     return res
       .status(201)
       .json(new ApiResponse(200, {}, `foundation update successful`));
@@ -120,9 +115,7 @@ export const getFoundationHandle = async (req, res) => {
           .status(401)
           .json(new ApiResponse(400, {}, `Foundation not found`));
 
-      data.logo = data.logo
-        ? `${process.env.BASE_URL}/foundation/logo/${data.logo}`
-        : `${process.env.DEFAULT_IMAGE}`;
+      data.logo = data.logo ? data.logo : `${process.env.DEFAULT_IMAGE}`;
 
       return res
         .status(200)
@@ -137,9 +130,7 @@ export const getFoundationHandle = async (req, res) => {
       return res.status(401).json(new ApiResponse(400, {}, `data not found`));
 
     data.map((item) => {
-      item.logo = item.logo
-        ? `${process.env.BASE_URL}/foundation/logo/${item.logo}`
-        : `${process.env.DEFAULT_IMAGE}`;
+      item.logo = item.logo ? item.logo : `${process.env.DEFAULT_IMAGE}`;
     });
 
     return res
@@ -190,7 +181,11 @@ export const deleteFoundationHandle = async (req, res) => {
     }
 
     if (foundation.logo) {
-      deleteOldImages("foundation/logo", foundation.logo);
+      await customUploader({
+        file: null,
+        oldUrl: foundation.logo,
+        folder: "foundation/logo",
+      });
     }
 
     await Foundation.deleteOne({ _id: id });
@@ -249,12 +244,20 @@ export const createCampaignHandle = async (req, res) => {
         .status(404)
         .json(new ApiResponse(404, {}, `foundation not found`));
 
+    let imageUrl = "";
+    if (req.file) {
+      imageUrl = await customUploader({
+        file: req.file,
+        folder: "foundation/campaign",
+      });
+    }
+
     const data = await Campaign.create({
       foundation: foundationId,
       title: title,
       description: description,
       eventDate: eventDate,
-      image: req.file ? req.file.filename : "",
+      image: imageUrl,
       location: location,
       participants: participants,
     });
@@ -290,6 +293,19 @@ export const getCampaignHandle = async (req, res) => {
         .status(404)
         .json(new ApiResponse(404, {}, `foundation not found`));
 
+    const getImageUrl = (image) => {
+      if (!image) return process.env.DEFAULT_IMAGE;
+      if (typeof image === "string" && image.startsWith("http")) return image;
+      return `${process.env.BASE_URL}/foundation/campaign/${image}`;
+    };
+
+    const getAvatarUrl = (avatar) => {
+      if (!avatar) return process.env.DEFAULT_PROFILE_PIC;
+      if (typeof avatar === "string" && avatar.startsWith("http"))
+        return avatar;
+      return `${process.env.BASE_URL}/foundation/logo/${avatar}`;
+    };
+
     if (campaignId) {
       const campaign = await Campaign.findOne({ _id: campaignId })
         .populate("participants", "_id fullName avatar")
@@ -299,15 +315,16 @@ export const getCampaignHandle = async (req, res) => {
           .status(404)
           .json(new ApiResponse(404, {}, `campaign not found`));
 
-      campaign.image = campaign.image
-        ? `${process.env.BASE_URL}/foundation/campaign/${campaign.image}`
-        : process.env.DEFAULT_IMAGE;
+      campaign.image = getImageUrl(campaign.image);
 
       campaign.participants.map((item) => {
-        item.avatar = item.avatar
-          ? `${process.env.BASE_URL}/foundation/logo/${item.image}`
-          : process.env.DEFAULT_PROFILE_PIC;
+        item.avatar = getAvatarUrl(item.avatar);
       });
+
+      const response = {
+        ...campaign.toObject(),
+        foundationName: foundation.name,
+      };
       return res
         .status(201)
         .json(new ApiResponse(200, campaign, `campaign fetched successfully`));
@@ -322,27 +339,26 @@ export const getCampaignHandle = async (req, res) => {
     if (!campaigns || campaigns.length == 0)
       return res.status(401).json(new ApiResponse(400, {}, `data not found`));
 
-    campaigns.forEach((data) => {
-      data.image = data.image
-        ? `${process.env.BASE_URL}/foundation/campaign/${data.image}`
-        : process.env.DEFAULT_IMAGE;
-
-      if (data.participants && data.participants.length > 0) {
-        data.participants.forEach((item) => {
-          if (!item.avatar) {
-            item.avatar = process.env.DEFAULT_PROFILE_PIC;
-          } else if (item.avatar.startsWith("http")) {
-            item.avatar = item.avatar;
-          } else {
-            item.avatar = `${process.env.BASE_URL}/foundation/logo/${item.avatar}`;
-          }
-        });
-      }
+    const campaignsWithFoundation = campaigns.map((data) => {
+      data.image = getImageUrl(data.image);
+      data.participants.map((item) => {
+        item.avatar = getAvatarUrl(item.avatar);
+      });
+      return {
+        ...data.toObject(),
+        foundationName: foundation.name,
+      };
     });
 
     return res
       .status(201)
-      .json(new ApiResponse(200, campaigns, `campaigns fetched successfully`));
+      .json(
+        new ApiResponse(
+          200,
+          campaignsWithFoundation,
+          `campaigns fetched successfully`
+        )
+      );
   } catch (error) {
     console.log(`error while getting campaign ${error}`);
     res.status(500).json(new ApiResponse(500, {}, `Internal server error`));
@@ -391,7 +407,13 @@ export const deleteCampaignHandle = async (req, res) => {
         .status(404)
         .json(new ApiResponse(404, {}, `foundation not found`));
 
-    deleteOldImages("foundation/campaign", campaign.image);
+    if (campaign.image) {
+      if (typeof campaign.image === "string" && campaign.image.startsWith("http")) {
+        await customUploader({ file: null, oldUrl: campaign.image, folder: "foundation/campaign" });
+      } else {
+        deleteOldImages("foundation/campaign", campaign.image);
+      }
+    }
     await Campaign.deleteOne({
       _id: campaignId,
     });

@@ -40,9 +40,11 @@ adminRouter.delete("/foundation", auth, isAdmin, deleteFoundationHandle)
 adminRouter.get("/foundation", getFoundationHandle)
 
 
-adminRouter.post("/campaign", auth, isAdmin, setUploadPath("foundation/campaign"), upload.single("image"),createCampaignHandle)
-adminRouter.get("/campaign", getCampaignHandle)
-adminRouter.delete("/campaign", auth, isAdmin, deleteCampaignHandle)
+adminRouter.post("/campaign", auth, isAdmin, setUploadPath("foundation/campaign"), upload.single("image"), createCampaignHandle)
+
+adminRouter.post("/campaigns",  getCampaignHandle)
+adminRouter.delete("/campaign", isAdmin, deleteCampaignHandle)
+
 
 
 adminRouter.post("/faq", auth, isAdmin, addFaqHandle)
