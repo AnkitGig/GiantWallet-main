@@ -7,6 +7,7 @@ import networkRouter from "../routes/network.routes.js";
 import tokenRouter from "./token.routes.js";   
 import swapRouter from "./swap.routes.js";
 import cryptoRouter from "./crypto.routes.js";
+import walletRouter from "./wallet.routes.js";
 
 const rootRouter = Router();
 
@@ -18,5 +19,6 @@ rootRouter.use("/network", networkRouter);
 rootRouter.use("/token", tokenRouter);
 rootRouter.use("/swap", swapRouter);
 rootRouter.use("/crypto", cryptoRouter);
+rootRouter.use("/wallet", walletRouter);
 
 export default rootRouter;

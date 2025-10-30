@@ -266,7 +266,7 @@ import {Network} from "../../models/network/network.js"
 
 const seedDefaultNetworks = async () => {
   try {
-    await mongoose.connect("mongodb+srv://thegiantwalletapp_db_user:thegiantwallet@cluster0.nuelqzd.mongodb.net/Giantwallet");
+    await mongoose.connect(process.env.MONGO_URI);
 
     for (const network of defaultNetworks) {
       const exists = await Network.findOne({ chainId: network.chainId, isCustom: false });
