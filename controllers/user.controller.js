@@ -62,7 +62,7 @@ export const registerHandle = async (req, res) => {
       otp,
       otpExpireAt,
     });
-
+            
     let msg = `Your verification code is ${otp}. It will expire in 5 minutes. Do not share this code with anyone`;
     const smsResult = await sendSms(phone, msg);
     if (!smsResult.success)
@@ -112,9 +112,8 @@ export const verifyOtpHandle = async (req, res) => {
     }
 
     const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
+    if (!user)
       return res.status(404).json(new ApiResponse(404, {}, `User not found`));
-    }
 
     if (!user.otp || !user.otpExpireAt) {
       return res
@@ -606,7 +605,6 @@ export const myProfileHandle = async (req, res) => {
           new ApiResponse(400, {}, `your account has been temporarily blocked.`)
         );
 
-
     // If avatar is a Cloudinary URL, use as is, else fallback
     user.avatar = user.avatar
       ? user.avatar
@@ -721,9 +719,6 @@ export const changePasswordHandle = async (req, res) => {
 
 export const bioMetricLogin = async (req, res) => {
   try {
-  
-
-
   } catch (error) {
     console.log(`Error while login with bio metric :`, error);
     return res

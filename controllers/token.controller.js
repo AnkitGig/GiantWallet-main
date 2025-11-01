@@ -54,7 +54,7 @@ export const fetchTokenHandle = async (req, res) => {
     }
 };
 
-export const submitTokenHandle = async (req, res) => {
+export const submitTokenHandle = async (req, res) => {  
     try {
         const { chainId, contractAddress, symbol, decimals, name } = req.body;
 

@@ -267,7 +267,6 @@ import {Network} from "../../models/network/network.js"
 const seedDefaultNetworks = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
-
     for (const network of defaultNetworks) {
       const exists = await Network.findOne({ chainId: network.chainId, isCustom: false });
       if (!exists) {

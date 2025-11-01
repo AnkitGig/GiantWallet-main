@@ -45,6 +45,16 @@ export const sendCryptoController = async (req, res) => {
 
 export const receiveCryptoController = async (req, res) => {
   try {
+    const { addr} = req.body;
+    const schema = Joi.object({
+      addr: Joi.string().required(),
+    });
+
+    const { error } = schema.validate(req.body);
+    if (error)
+         return res.status(400).json({ status: false, message: error.details[0].message });
+    
+    return res.status(200).json(new ApiResponse(200, {addr}, `Received address fetched successfully`));
   } catch (error) {
     console.error(`Error while receiving crypto:`, error);
     return res
@@ -52,3 +62,5 @@ export const receiveCryptoController = async (req, res) => {
       .json(new ApiResponse(500, {}, `Internal Server Error`));
   }
 };
+
+
